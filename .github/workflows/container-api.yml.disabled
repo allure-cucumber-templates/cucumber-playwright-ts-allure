@@ -1,0 +1,101 @@
+name: '🐳 API Tests : Execution'
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1-5' # Every weekdays at 2AM
+  push:
+    branches:
+      - main
+
+env:
+  USE_ALLURE: 'true'
+  EXECUTE_TYPE: 'CI'
+  FEATURE: "api"
+  IMAGE_CONTAINER_FOLDER_SRC: ''
+
+# Ensures that only one deploy task per branch/environment will run at a time.
+concurrency:
+  group: environment-${{ github.ref }}-api
+  cancel-in-progress: true
+
+jobs:
+  run-e2e-tests:
+    environment: 'QA'
+    runs-on: ubuntu-22.04
+    name: '🕹️ Run API tests'
+    container:
+      image: 
+      credentials:
+        username: ${{ secrets.}}
+        password: ${{ secrets.}}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - name: Moves resources
+        if: always()
+        run: |
+          echo GITHUB_WORKSPACE=$GITHUB_WORKSPACE
+          rm -rf $IMAGE_CONTAINER_FOLDER_SRC/steps
+          rm -rf $IMAGE_CONTAINER_FOLDER_SRC/test_resources
+          rm -rf $IMAGE_CONTAINER_FOLDER_SRC/features
+          cp -rf $GITHUB_WORKSPACE/steps $IMAGE_CONTAINER_FOLDER_SRC/steps
+          cp -rf $GITHUB_WORKSPACE/test_resources $IMAGE_CONTAINER_FOLDER_SRC/test_resources
+          cp -rf $GITHUB_WORKSPACE/features $IMAGE_CONTAINER_FOLDER_SRC/features          
+          cp -rf $GITHUB_WORKSPACE/package.json $IMAGE_CONTAINER_FOLDER_SRC/package.json
+          ls -la $IMAGE_CONTAINER_FOLDER_SRC/steps
+          ls -la $IMAGE_CONTAINER_FOLDER_SRC/test_resources  
+          ls -la $IMAGE_CONTAINER_FOLDER_SRC/features
+          mkdir -p $IMAGE_CONTAINER_FOLDER_SRC/reports/allure-results || true
+
+      - name: NPM INSTALL
+        run: cd $IMAGE_CONTAINER_FOLDER_SRC && npm install
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: 0
+
+      - name: Play tests
+        env:
+          AUTH_USER: ${{ secrets.AUTH_USER }}
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+        run: |
+          cd $IMAGE_CONTAINER_FOLDER_SRC && npm run test:$FEATURE
+
+      - name: Move results
+        if: always()
+        run: |
+          ls -la $IMAGE_CONTAINER_FOLDER_SRC/reports
+          ls -la $GITHUB_WORKSPACE
+          mv $IMAGE_CONTAINER_FOLDER_SRC/reports $GITHUB_WORKSPACE/reports
+          ls -la $GITHUB_WORKSPACE/reports
+
+      - name: Get allure history for history trend
+        uses: actions/checkout@v3
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages-${{ env.FEATURE }}
+          path: gh-pages-${{ env.FEATURE }}
+
+      - name: Setup allure report
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        id: allure-report
+        with:
+          allure_results: reports/allure-results
+          gh_pages: gh-pages-${{ env.FEATURE }}
+          allure_report: allure-report
+          allure_history: allure-history
+          keep_reports: 5
+
+      - name: Deploy report to Github Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-history
+          publish_branch: gh-pages-${{ env.FEATURE }}
+

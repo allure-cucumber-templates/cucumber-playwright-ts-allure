@@ -1,0 +1,73 @@
+name: '🖥 ALL Tests : Execution'
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1-5' # Every weekdays at 2AM
+  push:
+    branches:
+      - main
+
+env:
+  NODE_VERSION: '16'
+  FEATURE: 'all'
+  ALLURE_VERSION: '2.19.0'
+  EXECUTE_TYPE: 'CI'
+
+# Ensures that only one deploy task per branch/environment will run at a time.
+concurrency:
+  group: environment-${{ github.ref }}-os
+  cancel-in-progress: true
+
+jobs:
+  run-e2e-tests:
+    runs-on: ubuntu-22.04
+    name: '🕹️ Run E2E tests'
+    steps:
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Play tests
+        env:
+          AUTH_USER: ${{ secrets.AUTH_USER }}
+          AUTH_PASSWORD: ${{ secrets.AUTH_PASSWORD }}
+        run: npm run test:all
+
+      - name: Get allure history for history trend
+        uses: actions/checkout@v2
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages-${{ env.FEATURE}}
+          path: gh-pages-${{ env.FEATURE}}
+
+      - name: Setup allure report
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        id: allure-report
+        continue-on-error: true
+        with:
+          allure_results: reports/allure-results
+          gh_pages: gh-pages-${{ env.FEATURE}}
+          allure_report: allure-report
+          allure_history: allure-history
+          keep_reports: 5
+
+      - name: Deploy report to Github Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: allure-history
+          publish_branch: gh-pages-${{ env.FEATURE}}
