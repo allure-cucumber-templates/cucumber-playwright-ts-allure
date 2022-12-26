@@ -1,6 +1,8 @@
 import { ICustomWorld } from './custom-world';
 import { config } from './config';
-import { Allure, ContentType } from 'allure-cucumberjs';
+
+const storagestatepath = './storageState.json';
+const screenshots_folder = './screenshots/';
 
 import {
   Before,
@@ -24,7 +26,9 @@ import { ITestCaseHookParameter } from '@cucumber/cucumber/lib/support_code_libr
 import { ensureDir } from 'fs-extra';
 import axios from 'axios';
 import * as fs from 'fs';
-import { Scenario } from '@cucumber/messages';
+
+import console from 'console';
+import { PickleNameFilter } from '@cucumber/cucumber/lib/pickle_filter';
 
 let browser: ChromiumBrowser | FirefoxBrowser | WebKitBrowser;
 const tracesDir = 'traces';
@@ -48,9 +52,14 @@ BeforeAll(async function () {
       browser = await chromium.launch(config.browserOptions);
   }
   await ensureDir(tracesDir);
-  console.log('Browser executed: ', browser);
 });
-
+Before(async function (this: ICustomWorld, { pickle }: ITestCaseHookParameter) {
+  const parent_suite = await pickle.uri
+    .replace(/[a-zA-Z]+\/[a-zA-Z]+\//i, '')
+    .replace('.feature', '')
+    .toUpperCase();
+  await this.parentSuite(parent_suite);
+});
 Before({ tags: '@ignore' }, async function () {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return 'skipped' as any;
@@ -63,12 +72,23 @@ Before({ tags: '@debug' }, async function (this: ICustomWorld) {
 Before({ tags: '@ui' }, async function (this: ICustomWorld, { pickle }: ITestCaseHookParameter) {
   this.startTime = new Date();
   this.testName = pickle.name.replace(/\W/g, '-');
+
   // customize the [browser context](https://playwright.dev/docs/next/api/class-browser#browsernewcontextoptions)
-  this.context = await browser.newContext({
-    acceptDownloads: true,
-    recordVideo: process.env.PWVIDEO ? { dir: 'screenshots' } : undefined,
-    viewport: null,
-  });
+
+  if (fs.existsSync(storagestatepath)) {
+    this.context = await browser.newContext({
+      storageState: storagestatepath,
+      acceptDownloads: true,
+      recordVideo: process.env.PWVIDEO ? { dir: 'screenshots' } : undefined,
+      viewport: { width: 1200, height: 800 },
+    });
+  } else {
+    this.context = await browser.newContext({
+      acceptDownloads: true,
+      recordVideo: process.env.PWVIDEO ? { dir: 'screenshots' } : undefined,
+      viewport: { width: 1200, height: 800 },
+    });
+  }
   this.server = axios.create();
   this.server.defaults.baseURL = config.BASE_API_URL;
   this.server.defaults.headers.post = {
@@ -82,55 +102,77 @@ Before({ tags: '@ui' }, async function (this: ICustomWorld, { pickle }: ITestCas
   this.page = await this.context.newPage();
   this.page.on('console', async (msg: ConsoleMessage) => {
     if (msg.type() === 'log') {
-      //     await this.attach(msg.text());
+      await this.attach(msg.text());
     }
   });
-  this.feature = pickle;
+  // this.feature = pickle;
 });
 
 AfterStep(async function (this: ICustomWorld, { result }: ITestCaseHookParameter) {
-  if (result?.status != 'PASSED') {
-    const image: any = await this.page?.screenshot({ path: '/report/aaa', type: 'png' });
-    image && (await this.allure?.attachment('screenshot', image, ContentType.PNG));
+  if (result?.status == Status.FAILED) {
+    const image: any = await this.page?.screenshot({ type: 'png' });
+    image && (await this.allure?.attachment('screenshot', image, 'image/png'));
   }
 });
 
 After(async function (this: ICustomWorld, { result }: ITestCaseHookParameter) {
   if (result) {
-    if (result.status !== Status.PASSED) {
+    await this.attach(`Status: ${result?.status}, CurrentUrl:${this.page?.url()}`);
+    if (result.status == Status.FAILED) {
+      //Add screenshot
       const image = await this.page?.screenshot();
       image && (await this.attach(image, 'image/png'));
 
-      await this.context?.tracing
-        .stop({
-          path: `${tracesDir}/${this.testName}-${
-            this.startTime?.toISOString().split('.')[0]
-          }trace.zip`,
-        })
-        .catch(() => {});
+      //Add Video
+      if (process.env.PWVIDEO) {
+        const video = await this.page?.video();
+        const videopath = await video?.path();
+        await this.page?.waitForTimeout(3000);
+        if (video) {
+          await this.attach(fs.readFileSync('./' + videopath), 'video/webm');
+        }
+      }
+    }
+
+    if (result.status !== Status.PASSED) {
+      await this.context?.tracing.stop({
+        path: `${tracesDir}/${this.testName}-${
+          this.startTime?.toISOString().split('.')[0]
+        }trace.zip`,
+      });
     }
   }
+
   await this.page?.close();
   await this.context?.close();
 });
 
 AfterAll(async function () {
-  //write environment.properties for allure reporter
   fs.writeFileSync(
     'conf/reporters/environment.properties',
-    ` Browser = ${
-      config.browser
-    } ${browser.version()} \nEnvironment = DemoQA \nURL = https://demoqa.com/
+    ` Browser = ${config.browser} ${browser.version()} \nEnvironment = prod \nURL = ${
+      config.BASE_URL
+    }
     `,
   );
-
-  if (!fs.existsSync('reports/allure-results')) {
-    fs.mkdirSync('reports/allure-results', { recursive: true });
-  }
-  fs.copyFileSync('conf/reporters/categories.json', 'reports/allure-results/categories.json');
-  fs.copyFileSync(
+  fs.copyFile('conf/reporters/categories.json', 'reports/allure-results/categories.json', (err) => {
+    if (err) throw err;
+    console.log('File was copied to destination');
+  });
+  fs.copyFile(
     'conf/reporters/environment.properties',
     'reports/allure-results/environment.properties',
+    (err) => {
+      if (err) throw err;
+      console.log('environment_values are copied to destination');
+    },
   );
+  if (fs.existsSync(storagestatepath)) {
+    fs.unlinkSync(storagestatepath);
+  }
+  if (fs.existsSync(screenshots_folder)) {
+    fs.rmSync(screenshots_folder, { recursive: true, force: true });
+  }
+
   await browser.close();
 });
