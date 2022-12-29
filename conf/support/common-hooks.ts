@@ -1,8 +1,13 @@
 import { ICustomWorld } from './custom-world';
 import { config } from './config';
 import { Allure, ContentType } from 'allure-cucumberjs';
-
+import {ensureFileSync} from 'fs-extra';
+var path = require('path');
 const screenshots_folder = './screenshots/';
+const allure_categories_conf_path = path.join('conf','reporters','categories.json');
+const allure_envProperties_path = path.join('conf','reporters','environment.properties');
+const allure_categories_target_path = path.join('reports','allure-results','categories.json');
+const allure_envProperties_target_path = path.join('reports','allure-results','environment.properties');
 
 import {
   Before,
@@ -49,6 +54,9 @@ BeforeAll(async function () {
       browser = await chromium.launch(config.browserOptions);
   }
   await ensureDir(tracesDir);
+  // Create emptid allure properties files empty in reports folder
+  ensureFileSync(allure_envProperties_target_path);
+  ensureFileSync(allure_categories_target_path);
 });
 
 Before(async function (this: ICustomWorld, { pickle }: ITestCaseHookParameter) {
@@ -142,20 +150,20 @@ After(async function (this: ICustomWorld, { result }: ITestCaseHookParameter) {
 AfterAll(async function () {
   //write environment.properties for allure reporter
   fs.writeFileSync(
-    'conf/reporters/environment.properties',
+    allure_envProperties_path,
     ` Browser = ${config.browser} ${browser.version()} \nEnvironment = prod \nURL = ${
       config.BASE_URL
     }
     `,
   );
 
-  fs.copyFile('conf/reporters/categories.json', 'reports/allure-results/categories.json', (err) => {
+  fs.copyFile(allure_categories_conf_path, allure_categories_target_path, (err) => {
     if (err) throw err;
     console.log('File was copied to destination');
   });
   fs.copyFile(
-    'conf/reporters/environment.properties',
-    'reports/allure-results/environment.properties',
+    allure_envProperties_path,
+    allure_envProperties_target_path,
     (err) => {
       if (err) throw err;
       console.log('environment_values are copied to destination');
