@@ -56,10 +56,10 @@ In a classic usage, you should need only these commands :
 
 ```bash
   npm run tags [-- --tags="@tag1,@tag2"] # run tests with tags 
-  npm run all:ui
-  npm run all:data
-  npm run all:api
-  npm run all:all
+  npm run test:ui
+  npm run test:data
+  npm run test:api
+  npm run test:all
   npm run allure:serve 
   npm run allure:generate    
 ```
