@@ -8,6 +8,7 @@ import { PNG } from 'pngjs';
 import * as fs from 'fs';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
+import { Pickle } from '@cucumber/messages';
 
 /**
  * Compares a screenshot to a base image,
@@ -29,7 +30,7 @@ export function getImagePath(
 ): string {
   return join(
     'screenshots',
-    customWorld.feature?.uri || '',
+    customWorld.link?.name || '',
     options?.skipOs ? '' : process.platform,
     config.browser,
     `${name}.png`,

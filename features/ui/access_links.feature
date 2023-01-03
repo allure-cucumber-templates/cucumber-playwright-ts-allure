@@ -7,7 +7,7 @@ Feature: UI: Links_management
     Background:
         Given I navigate to Demoqa Home page
 
-    @demoQA_links @ui
+    @demoQA_links @ui @1
     Scenario: Redirection to a new page when clicking on link (tabs and windows)
         Given I navigate to the Links page
         When I access the link
