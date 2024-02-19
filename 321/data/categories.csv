@@ -1,0 +1,5 @@
+"Category","FAILED","BROKEN","PASSED","SKIPPED","UNKNOWN"
+"Product defects","25","0","0","0","0"
+"Automated","8","0","4","0","0"
+"Ignored tests","0","0","0","2","0"
+"Not automated","0","0","0","0","2"
