@@ -1,0 +1,8 @@
+apilink,apiresponse
+Created,201
+No Content,204
+Moved,301
+Bad Request,400
+Unauthorized,401
+Forbidden,403
+Not Found,404
