@@ -1,0 +1,1 @@
+Status: PASSED, CurrentUrl:http://the-internet.herokuapp.com/status_codes/500
